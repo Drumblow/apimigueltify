@@ -1,0 +1,29 @@
+{
+  "name": "youtube-audio-api",
+  "version": "1.0.0",
+  "description": "API para buscar vídeos no YouTube e retornar informações e áudio em MP3",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js",
+    "dev": "nodemon index.js",
+    "vercel-build": "echo \"No build step required\""
+  },
+  "keywords": [
+    "youtube",
+    "audio",
+    "mp3",
+    "api"
+  ],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "@ffmpeg-installer/ffmpeg": "^1.1.0",
+    "express": "^5.1.0",
+    "ffmpeg-static": "^5.2.0",
+    "youtube-sr": "^4.3.11",
+    "ytdl-core": "npm:@distube/ytdl-core@^4.16.10"
+  },
+  "devDependencies": {
+    "vercel": "^30.0.0" 
+  }
+}
