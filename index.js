@@ -1,4 +1,5 @@
 const express = require('express');
+const cors = require('cors');
 const YouTube = require('youtube-sr').default;
 const ytdl = require('ytdl-core');
 const ffmpeg = require('ffmpeg-static');
@@ -6,6 +7,10 @@ const cp = require('child_process');
 
 const app = express();
 const port = process.env.PORT || 3000;
+
+// Habilitar CORS para todas as origens
+app.use(cors());
+app.use(express.json());
 
 app.get('/search', async (req, res) => {
   const searchQuery = req.query.q;
@@ -106,8 +111,9 @@ app.get('/audio/:videoId', async (req, res) => {
   }
 });
 
-// app.listen(port, () => {
-//   console.log(`Servidor rodando na porta ${port}`);
-// });
+// Iniciar o servidor
+app.listen(port, () => {
+  console.log(`Servidor rodando na porta ${port}`);
+});
 
 module.exports = app; 

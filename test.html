@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Teste da API de Áudio</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        .search-container {
+            margin-bottom: 20px;
+        }
+        input, button {
+            padding: 8px;
+            font-size: 16px;
+        }
+        .result {
+            display: flex;
+            margin-bottom: 15px;
+            border: 1px solid #ddd;
+            padding: 10px;
+            border-radius: 5px;
+        }
+        .thumbnail {
+            width: 120px;
+            margin-right: 15px;
+        }
+        .info {
+            flex: 1;
+        }
+        .download-btn {
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            padding: 8px 12px;
+            cursor: pointer;
+            border-radius: 4px;
+        }
+        #results {
+            margin-top: 20px;
+        }
+    </style>
+</head>
+<body>
+    <h1>Teste da API de Áudio do YouTube</h1>
+    
+    <div class="search-container">
+        <input type="text" id="search-input" placeholder="Digite sua busca...">
+        <button id="search-btn">Buscar</button>
+    </div>
+    
+    <div id="results"></div>
+
+    <script>
+        const API_URL = 'http://localhost:3000';
+        
+        document.getElementById('search-btn').addEventListener('click', performSearch);
+        document.getElementById('search-input').addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') {
+                performSearch();
+            }
+        });
+
+        async function performSearch() {
+            const query = document.getElementById('search-input').value.trim();
+            if (!query) return;
+            
+            try {
+                const response = await fetch(`${API_URL}/search?q=${encodeURIComponent(query)}`);
+                const data = await response.json();
+                
+                displayResults(data.results);
+            } catch (error) {
+                console.error('Erro na busca:', error);
+                document.getElementById('results').innerHTML = '<p>Erro ao buscar vídeos. Tente novamente.</p>';
+            }
+        }
+
+        function displayResults(results) {
+            const resultsContainer = document.getElementById('results');
+            resultsContainer.innerHTML = '';
+            
+            if (!results || results.length === 0) {
+                resultsContainer.innerHTML = '<p>Nenhum resultado encontrado.</p>';
+                return;
+            }
+            
+            results.forEach(video => {
+                const resultElement = document.createElement('div');
+                resultElement.className = 'result';
+                
+                resultElement.innerHTML = `
+                    <img class="thumbnail" src="${video.thumbnail || 'placeholder.jpg'}" alt="${video.title}">
+                    <div class="info">
+                        <h3>${video.title}</h3>
+                        <p>Duração: ${video.duration}</p>
+                        <button class="download-btn" data-id="${video.id}">Baixar Áudio</button>
+                    </div>
+                `;
+                
+                resultsContainer.appendChild(resultElement);
+            });
+            
+            // Adicionar eventos para os botões de download
+            document.querySelectorAll('.download-btn').forEach(button => {
+                button.addEventListener('click', function() {
+                    const videoId = this.getAttribute('data-id');
+                    window.open(`${API_URL}/audio/${videoId}`, '_blank');
+                });
+            });
+        }
+    </script>
+</body>
+</html> 
