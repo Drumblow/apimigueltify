@@ -43,20 +43,47 @@
         #results {
             margin-top: 20px;
         }
+        .alert {
+            padding: 10px;
+            background-color: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+            border-radius: 4px;
+            margin-bottom: 15px;
+        }
+        .note {
+            padding: 10px;
+            background-color: #fff3cd;
+            color: #856404;
+            border: 1px solid #ffeeba;
+            border-radius: 4px;
+            margin-bottom: 15px;
+        }
     </style>
 </head>
 <body>
     <h1>Teste da API de Áudio do YouTube</h1>
+    
+    <div class="note">
+        <strong>Importante:</strong> Para evitar problemas de CORS, abra este arquivo diretamente no navegador 
+        (clique duas vezes no arquivo) e não através de um servidor local.
+    </div>
     
     <div class="search-container">
         <input type="text" id="search-input" placeholder="Digite sua busca...">
         <button id="search-btn">Buscar</button>
     </div>
     
+    <div id="message" style="display: none;" class="alert"></div>
     <div id="results"></div>
 
     <script>
-        const API_URL = 'http://localhost:3000';
+        // Detectar ambiente: usar localhost para desenvolvimento e a URL do Vercel para produção
+        const isLocalhost = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+        // Substitua 'sua-app.vercel.app' pela sua URL real do Vercel após o deploy
+        const API_URL = isLocalhost ? 'http://localhost:3000' : 'https://sua-app.vercel.app';
+        
+        console.log(`Usando API em: ${API_URL}`);
         
         document.getElementById('search-btn').addEventListener('click', performSearch);
         document.getElementById('search-input').addEventListener('keypress', function(e) {
@@ -69,14 +96,29 @@
             const query = document.getElementById('search-input').value.trim();
             if (!query) return;
             
+            const messageEl = document.getElementById('message');
+            messageEl.style.display = 'none';
+            
             try {
-                const response = await fetch(`${API_URL}/search?q=${encodeURIComponent(query)}`);
-                const data = await response.json();
+                const response = await fetch(`${API_URL}/search?q=${encodeURIComponent(query)}`, {
+                    method: 'GET',
+                    mode: 'cors',
+                    headers: {
+                        'Accept': 'application/json'
+                    }
+                });
                 
+                if (!response.ok) {
+                    throw new Error(`Erro na API: ${response.status} ${response.statusText}`);
+                }
+                
+                const data = await response.json();
                 displayResults(data.results);
             } catch (error) {
                 console.error('Erro na busca:', error);
-                document.getElementById('results').innerHTML = '<p>Erro ao buscar vídeos. Tente novamente.</p>';
+                messageEl.textContent = `Erro ao buscar vídeos: ${error.message}`;
+                messageEl.style.display = 'block';
+                document.getElementById('results').innerHTML = '';
             }
         }
 
@@ -98,19 +140,11 @@
                     <div class="info">
                         <h3>${video.title}</h3>
                         <p>Duração: ${video.duration}</p>
-                        <button class="download-btn" data-id="${video.id}">Baixar Áudio</button>
+                        <a href="${API_URL}/audio/${video.id}" target="_blank" class="download-btn">Baixar Áudio</a>
                     </div>
                 `;
                 
                 resultsContainer.appendChild(resultElement);
-            });
-            
-            // Adicionar eventos para os botões de download
-            document.querySelectorAll('.download-btn').forEach(button => {
-                button.addEventListener('click', function() {
-                    const videoId = this.getAttribute('data-id');
-                    window.open(`${API_URL}/audio/${videoId}`, '_blank');
-                });
             });
         }
     </script>
