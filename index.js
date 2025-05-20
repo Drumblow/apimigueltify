@@ -1,11 +1,9 @@
 const express = require('express');
 const cors = require('cors');
 const YouTube = require('youtube-sr').default;
-const axios = require('axios');
+const ytdl = require('@distube/ytdl-core');
 const cheerio = require('cheerio');
 const path = require('path');
-const youtubedl = require('youtube-dl-exec');
-const ffmpeg = require('ffmpeg-static');
 
 const app = express();
 const port = process.env.PORT || 3000;
@@ -23,7 +21,7 @@ app.get('/search', async (req, res) => {
   }
 
   try {
-    const searchResults = await YouTube.search(searchQuery, { limit: 5, type: 'video' });
+    const searchResults = await YouTube.search(searchQuery, { limit: 10, type: 'video' });
 
     if (!searchResults || searchResults.length === 0) {
       return res.status(404).json({ error: 'Nenhum vídeo encontrado para a busca.' });
@@ -48,52 +46,83 @@ app.get('/search', async (req, res) => {
 app.get('/audio/:videoId', async (req, res) => {
   const videoId = req.params.videoId;
 
-  if (!videoId) {
-    return res.status(400).json({ error: 'O ID do vídeo é obrigatório.' });
-  }
-
-  if (!/^[a-zA-Z0-9_-]{11}$/.test(videoId)) {
+  if (!videoId || !/^[a-zA-Z0-9_-]{11}$/.test(videoId)) {
     return res.status(400).json({ error: 'ID de vídeo inválido.' });
   }
 
-  console.log(`Processando vídeo com youtube-dl: ${videoId}`);
   const videoUrl = `https://www.youtube.com/watch?v=${videoId}`;
+  console.log(`Processando áudio para: ${videoUrl} com @distube/ytdl-core`);
 
   try {
-    const audioBuffer = await youtubedl(videoUrl, {
-      extractAudio: true,
-      audioFormat: 'mp3',
-      audioQuality: '0',
-      ffmpegLocation: ffmpeg,
-      output: '-', // Retorna o buffer via stdout/Promise
-      addHeader: [
-        'User-Agent:Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
-        'Accept-Language:en-US,en;q=0.9'
-      ],
+    const info = await ytdl.getInfo(videoUrl);
+    // Priorizar M4A (geralmente AAC), depois WEBM (geralmente Opus)
+    const audioFormat = ytdl.chooseFormat(info.formats, {
+      filter: 'audioonly',
+      quality: 'highestaudio',
+      // Tentar obter um formato que seja explicitamente m4a ou webm
+      // A biblioteca pode retornar outros, mas estes são comuns e bem suportados
+      format: 'm4a'
+    }) || ytdl.chooseFormat(info.formats, {
+      filter: 'audioonly',
+      quality: 'highestaudio',
+      format: 'webm'
+    }) || ytdl.chooseFormat(info.formats, { // Fallback para qualquer áudio
+      filter: 'audioonly',
+      quality: 'highestaudio'
     });
 
-    // O resultado de youtubedl com output: '-' é o buffer do áudio
-    // stdout e stderr da promise são para logs, não para o stream de dados principal aqui
-    // if (audio.stdout) { // Esta verificação não é mais necessária da mesma forma
-
-    if (audioBuffer) {
-      res.setHeader('Content-Type', 'audio/mpeg');
-      res.setHeader('Content-Disposition', `attachment; filename="${videoId}.mp3"`);
-      res.send(audioBuffer);
-    } else {
-      // Isso não deveria acontecer se a promise resolveu sem erro e output é '-'
-      console.error(`youtube-dl não retornou buffer para ${videoId}, embora não tenha lançado erro.`);
-      if (!res.headersSent) {
-          res.status(500).json({ error: 'Falha ao obter o buffer de áudio.' });
-      }
+    if (!audioFormat) {
+      console.error('Nenhum formato de áudio adequado encontrado para:', videoId);
+      return res.status(404).json({ error: 'Nenhum formato de áudio adequado encontrado.' });
     }
 
+    console.log('Formato de áudio escolhido:', {
+      itag: audioFormat.itag,
+      container: audioFormat.container,
+      mimeType: audioFormat.mimeType,
+      audioBitrate: audioFormat.audioBitrate
+    });
+
+    const safeTitle = info.videoDetails.title.replace(/[^a-zA-Z0-9_\-]/g, '') || 'audio';
+    const extension = audioFormat.container || 'm4a'; // Default to m4a if container is not clear
+    const filename = `${safeTitle}.${extension}`;
+
+    res.setHeader('Content-Type', audioFormat.mimeType || 'audio/mp4'); // Default to audio/mp4
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    // Se soubermos o tamanho, podemos definir Content-Length
+    // if (audioFormat.contentLength) {
+    //   res.setHeader('Content-Length', audioFormat.contentLength);
+    // }
+
+    const audioStream = ytdl(videoUrl, { format: audioFormat });
+
+    audioStream.pipe(res);
+
+    audioStream.on('error', (err) => {
+      console.error(`Erro durante o stream de áudio (${videoId}):`, err);
+      if (!res.headersSent) {
+        res.status(500).json({ error: 'Erro ao fazer o stream do áudio.' });
+      }
+      // Destruir o stream da resposta se o erro ocorrer no meio do stream
+      if (!res.writableEnded) {
+        res.destroy();
+      }
+    });
+
+    audioStream.on('end', () => {
+      console.log(`Stream de áudio (${videoId}) finalizado.`);
+      if (!res.writableEnded) {
+        res.end();
+      }
+    });
+
   } catch (error) {
-    // O erro de youtube-dl-exec já inclui stderr se houver
-    console.error(`Erro ao processar /audio/${videoId} com youtube-dl:`, error.message);
-    console.error('Stderr (se disponível):', error.stderr);
+    console.error(`Erro ao processar /audio/${videoId} com @distube/ytdl-core:`, error.message);
+    if (error.message.includes('confirm your age') || error.message.includes('unavailable') || error.message.includes('private')) {
+      return res.status(403).json({ error: 'Vídeo indisponível (idade, privado, etc).', details: error.message });
+    }
     if (!res.headersSent) {
-      res.status(500).json({ error: 'Erro interno ao processar o áudio com youtube-dl.', details: error.stderr || error.message });
+      res.status(500).json({ error: 'Erro interno ao obter informações do áudio.', details: error.message });
     }
   }
 });
