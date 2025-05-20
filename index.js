@@ -8,6 +8,16 @@ const path = require('path');
 const app = express();
 const port = process.env.PORT || 3000;
 
+// Opções comuns para ytdl, incluindo User-Agent
+const ytdlOptions = {
+  requestOptions: {
+    headers: {
+      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/100.0.4896.127 Safari/537.36'
+      // Poderíamos adicionar 'Accept-Language': 'en-US,en;q=0.9', etc., se necessário
+    }
+  }
+};
+
 // Habilitar CORS para todas as origens
 app.use(cors());
 app.use(express.json());
@@ -54,7 +64,8 @@ app.get('/audio/:videoId', async (req, res) => {
   console.log(`Processando áudio para: ${videoUrl} com @distube/ytdl-core`);
 
   try {
-    const info = await ytdl.getInfo(videoUrl);
+    // Passar ytdlOptions para getInfo
+    const info = await ytdl.getInfo(videoUrl, ytdlOptions);
     // Priorizar M4A (geralmente AAC), depois WEBM (geralmente Opus)
     const audioFormat = ytdl.chooseFormat(info.formats, {
       filter: 'audioonly',
@@ -94,7 +105,8 @@ app.get('/audio/:videoId', async (req, res) => {
     //   res.setHeader('Content-Length', audioFormat.contentLength);
     // }
 
-    const audioStream = ytdl(videoUrl, { format: audioFormat });
+    // Passar ytdlOptions também para o stream de download
+    const audioStream = ytdl(videoUrl, { ...ytdlOptions, format: audioFormat });
 
     audioStream.pipe(res);
 
@@ -118,8 +130,10 @@ app.get('/audio/:videoId', async (req, res) => {
 
   } catch (error) {
     console.error(`Erro ao processar /audio/${videoId} com @distube/ytdl-core:`, error.message);
-    if (error.message.includes('confirm your age') || error.message.includes('unavailable') || error.message.includes('private')) {
-      return res.status(403).json({ error: 'Vídeo indisponível (idade, privado, etc).', details: error.message });
+    if (error.message.includes('confirm your age') || error.message.includes('unavailable') || error.message.includes('private') ||
+        error.message.includes('Sign in to confirm you\\u2019re not a bot') ||
+        error.message.includes('confirm you are not a bot')) {
+      return res.status(403).json({ error: 'Vídeo indisponível ou acesso negado pelo YouTube.', details: error.message });
     }
     if (!res.headersSent) {
       res.status(500).json({ error: 'Erro interno ao obter informações do áudio.', details: error.message });
