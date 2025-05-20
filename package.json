@@ -17,12 +17,12 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
-    "@distube/ytdl-core": "^4.16.10",
     "axios": "^1.9.0",
     "cheerio": "^1.0.0-rc.12",
     "cors": "^2.8.5",
     "express": "^5.1.0",
-    "youtube-sr": "^4.3.11"
+    "youtube-sr": "^4.3.11",
+    "youtubei.js": "^13.4.0"
   },
   "devDependencies": {
     "nodemon": "^3.1.0",
